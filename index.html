@@ -16,88 +16,325 @@
     </style>
 </head>
 <body>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <h1>題目一:數位孿生碰撞檢測系統架構說明</h1>
 
-    <h1>數位孿生碰撞檢測系統架構說明</h1>
+    <section id="chapter-0">
+        <h2 style="border-bottom: 2px solid #333; padding-bottom: 10px;">0. 問題定義與解決方向</h2>
+        
+        <div style="background-color: #fcfcfc; border: 1px solid #e1e4e8; padding: 25px; border-radius: 6px;">
+            <h3 style="color: #d73a49;">■ Problem Definition</h3>
+            <ol>
+                <li><strong>運算瓶頸：</strong> 程式最主要的效能損耗點在於 <strong>"物體間的碰撞檢測"</strong>。</li>
+                <li><b>物件規模：</b> 窮舉法複雜度為 \( O(N^2) \)，當 \( N=10,000 \) 時運算量巨大。</li>                
+                <li><strong>建置成本納入：</strong> 資料結構（索引）的 <strong>建置與維護</strong> 必須計入總時間成本。</li>
+                <li><strong>輸出完整性：</strong> 檢測結果必須包含"有無碰撞"及 <strong>"碰撞深度"</strong>。</li>
+                <li><strong>多樣化適配：</strong> 需針對多種應用需求（即時編輯 vs. 全場景檢查）給出不同的技術對策。</li>
+            </ol>
 
-    <section id="intro">
-        <h2>0. 核心設計理念</h2>
-        <div class="logic-box">
-            <strong>為了應付大規模查詢，我們必須有效率地處理大量的碰撞檢測問題。</strong><br>
-            單一的檢測演算法無法同時滿足「萬件物件」與「公釐級精度」。因此，本系統採用<strong>分層過濾（Hierarchical Pruning）</strong>策略，根據物件屬性與需求場景，動態配置最佳的資料結構與檢測核心。
-        </div>
-    </section>
-
-    <section id="data-structures">
-        <h2>1. 物件與建築物屬性的最佳化儲存</h2>
-        <p>我們將場景物件分為三類，分別採用不同的空間索引策略以極小化運算開銷：</p>
-        <table>
-            <tr>
-                <th>物件類別</th>
-                <th>實作方式 (Data Structure)</th>
-                <th>理由</th>
-            </tr>
-            <tr>
-                <td><strong>靜態環境 (大樓/牆體)</strong></td>
-                <td>Static BVH (AABB Tree)</td>
-                <td>建築結構跨度大且不移動，BVH 提供極高的「空間剪枝」效率，能瞬間排除無關房間。</td>
-            </tr>
-            <tr>
-                <td><strong>動態設備 (萬件機器)</strong></td>
-                <td>Dynamic BVH / Spatial Hash</td>
-                <td>適用於尺寸相近的大量物件，支援快速的 $O(\log N)$ 位置更新。</td>
-            </tr>
-            <tr>
-                <td><strong>編輯中物件 (拖拉物件)</strong></td>
-                <td>Fat AABB + Swept Volume</td>
-                <td>為編輯中的物體預留緩衝空間，減少每一幀重新計算索引的頻率。</td>
-            </tr>
-        </table>
-    </section>
-
-    <section id="collision-core">
-        <h2>2. 高精度 Mesh 碰撞檢測與量化</h2>
-        <p>針對精密 Mesh 網格物件，我們不直接進行三角形對撞，而是透過幾何簡化技術：</p>
-        <div class="logic-box">
+            <h3 style="color: #0366d6; margin-top: 30px;">■ Search for Solutions</h3>
             <ul>
-                <li><strong>幾何預處理：</strong> 使用 <strong>V-HACD 演算法</strong> 將複雜 Mesh 分解為一組 <strong>Convex Hulls (凸多面體組合)</strong>。</li>
-                <li><strong>干涉判定與深度：</strong> 採用 <strong>GJK (Gilbert-Johnson-Keerthi)</strong> 結合 <strong>EPA (Expanding Polytope Algorithm)</strong>。
-                    <ul>
-                        <li><strong>GJK：</strong> 快速判定凸體是否碰撞，並給出最短距離。</li>
-                        <li><strong>EPA：</strong> 當發生碰撞時，算出精確的 <strong>Location (干涉位置)</strong> 與 <strong>Magnitude (碰撞深度)</strong>。</li>
-                    </ul>
-                </li>
+                <li><strong>高效資料結構：</strong> 尋找能以 <strong>最少物體比對次數</strong> 實現查詢，同時確保結果正確性的結構。</li>
+                <li><strong>碰撞有無以及碰撞強度：</strong> 尋找能同時處理"判定碰撞"與"計算深度"的 <strong>幾何演算法</strong>。</li>
+                <li><strong>代價權衡分析：</strong> 釐清各種需求"在乎什麼"與"可以犧牲什麼"，制定對應的技術屬性。</li>
             </ul>
+
+            <div style="margin-top: 25px; padding: 15px; background-color: #e1f5fe; border-left: 5px solid #03a9f4;">
+                <strong>【核心結論】</strong><br>
+                我們提出 <strong>由大到小的階段型碰撞查詢(樓層、區域、具體物體)</strong> 搭配 <strong>雙 BVH (Static/Dynamic Dual-Tree) 結構</strong>。
+            </div>
         </div>
     </section>
 
-    <section id="scenarios">
-        <h2>3. 情境需求與代價分析 (Trade-offs)</h2>
-        <table>
-            <tr>
-                <th>需求情境</th>
-                <th>首要屬性</th>
-                <th>選擇方法</th>
-                <th>犧牲代價 (Cost)</th>
-            </tr>
-            <tr>
-                <td><strong>高頻率變動</strong></td>
-                <td>低延遲 (Latency)</td>
-                <td>Spatial Hashing + SAT</td>
-                <td><strong>精確度：</strong> OBB 包圍盒可能會有誤報，需二階確認。</td>
-            </tr>
-            <tr>
-                <td><strong>極高精度需求</strong></td>
-                <td>量化精準度 (Accuracy)</td>
-                <td>V-HACD + GJK + EPA</td>
-                <td><strong>計算資源：</strong> 運算成本高，不適合對場景內所有物件同時施作。</td>
-            </tr>
-            <tr>
-                <td><strong>超大規模固定場景</strong></td>
-                <td>吞吐量 (Throughput)</td>
-                <td>Dual-Tree Traversal</td>
-                <td><strong>記憶體與預處理：</strong> 需預先建構大型靜態 BVH，且佔用較多內存。</td>
-            </tr>
-        </table>
+    <section id="chapter-1-final" style="margin-bottom: 40px; background: #fdfdfd; padding: 25px; border-radius: 12px; border: 1px solid #eee;">
+        <h2 style="color: #2980b9; border-left: 6px solid #2980b9; padding-left: 15px;">1. 高效的資料結構，三種物體使用三種策略</h2>
+        
+        <div style="font-size: 1.05em; line-height: 1.8; color: #444;">
+            <p>面對萬件物件，我們不能用同一種方法對待所有東西。系統根據"移動頻率"將物體拆分為三類，以達到最佳化的 \( O(\log N) \)  查詢效能：</p>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff;">
+                <tr style="background: #2c3e50; color: white;">
+                    <th style="padding: 12px; border: 1px solid #ddd; width: 25%;">物體類別</th>
+                    <th style="padding: 12px; border: 1px solid #ddd; width: 30%;">技術實作</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">設計理由 (Rationale)</th>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background: #f9f9f9;"><b>A. 靜態環境</b><br>(結構、牆體)</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;"><b>Static BVH</b><br><small>(Build by SAH)</small></td>
+                    <td>
+                        <strong>理由：</strong>建築結構一旦生成就不會再動。我們花費較高成本使用 <em>Surface Area Heuristic (SAH)</em> 演算法建立最精簡的樹，換取<strong>極高頻率的查詢效率</strong>。
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background: #f9f9f9;"><b>B. 已佈置物件</b><br>(機台、設備)</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;"><b>Dynamic BVH</b><br><small>(插入型/Refitting)</small></td>
+                    <td>
+                        <strong>理由：</strong>這類物件（如機台）可能每週或每天微調。使用<strong>動態 BVH</strong> 記錄，當位置變動時，只需花費 \( O(H) \) 的極小成本微調樹枝，不需整棵樹砍掉重練，在突破原始盒子範圍的時候觸發Refitting以重新適配新位置。
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background: #f9f9f9;"><b>C. 編輯中物件</b><br>(滑鼠拖拉中)</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;"><b>Fat AABB</b><br><small>(不入樹，作為 Query)</small></td>
+                    <td>
+                        <strong>理由：</strong>物件在決定擺放前位置極不穩定。與其頻繁更新樹結構，不如讓它當個<strong>「查詢者」</strong>。當它移動合法並點擊確認時，才正式併入 <b>Dynamic BVH</b>。
+                    </td>
+                </tr>
+            </table>
+
+            <div style="margin-top: 25px; padding: 15px; background: #fffde7; border: 1px solid #fbc02d; border-radius: 8px;">
+                <strong>技術關鍵點：為什麼這三種資料結構設計能解決「萬件規模」的瓶頸？</strong>
+                
+                <ul style="line-height: 1.8;">
+                    <li>
+                        <strong>Static BVH (精準剪枝)：</strong> 
+                        因為環境不會動，我們追求<strong>盒子與模型的「零空隙」</strong>。這讓查詢時能以最高效率「剪掉」無關區域，確保在萬件物件中瞬間排除 99% 的無效計算。
+                    </li>
+                    <li>
+                        <strong>Dynamic BVH (結構穩定)：</strong> 
+                        機台設備可能會有小位移，盒子預留微小空隙是為了<strong>「容忍震動」</strong>。只要移動不突破盒子，樹的拓撲結構就不需重組，將更新成本壓低在 \( O(H) \)。
+                    </li>
+                    <li>
+                        <strong>Fat AABB (緩衝查詢)：</strong> 
+                        這是針對「編輯物件」的最佳化。它不入樹，而是透過大緩衝區<strong>「鎖定鄰居名單」</strong>。
+                        <ul>
+                            <li>只要沒突破緩衝，系統只做<strong>局部檢查</strong>（比對既存鄰居名單），保證操作精確。</li>
+                            <li>只有突破緩衝，才發起昂貴的<strong>全局搜索</strong>（更新鄰居名單），節省負載。</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+            
+        </div>
+    </section>
+
+    
+    <section id="chapter-2" style="margin-bottom: 40px; background: #fdfdfd; padding: 25px; border-radius: 12px; border: 1px solid #eee;">
+        <h2 style="color: #2980b9; border-left: 6px solid #2980b9; padding-left: 15px; margin-bottom: 20px;">2. 粗查詢階段 (Broad-phase)：3D 長方盒快速排除不相關的大多數樓層/區域/物體</h2>
+        
+        <div style="font-size: 1.05em; line-height: 1.8; color: #444;">
+            <p>在進行任何高精密計算前，系統必須先回答一個問題：<strong>「哪些物件連『邊』都沒摸到？」</strong></p>
+
+            <h3 style="color: #2980b9;">■ 3D AABB：快速的外包長方形篩選</h3>
+            <p>
+                我們為每個每個樹枝節點包上一層 <strong>AABB (Axis-Aligned Bounding Box)</strong>。這是一個永遠與 X, Y, Z 軸平行的長方體。
+            </p>
+            <div style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin: 15px 0;">
+                <strong>【3D 判定邏輯】</strong>：只需進行簡單的數值比對。<br>
+                若物體 A 與物體 B 在 \( X, Y, Z \) 三個軸向的投影範圍<strong>同時重疊</strong>，才判定為「疑似碰撞」。
+            </div>
+
+            
+
+            <h3 style="color: #2980b9; margin-top: 30px;">■ BVH 樹的剪枝搜尋</h3>
+            <p>
+                利用我們在第 1 章建立的 <strong>BVH 樹</strong>，查詢過程變成了一場「由大到小」的過濾：
+            </p>
+            <ol>
+                <li><strong>根節點比對：</strong> 先檢查「編輯中物件」有沒有撞到整棟建築的大盒子。</li>
+                <li><strong>分支剪枝 (Pruning)：</strong> 如果連大盒子都沒撞到，系統會直接<strong>忽略</strong>該分支下的數千個物件。</li>
+                <li><strong>遞迴向下：</strong> 只有重疊的分支，才會繼續打開裡面的中盒子、小盒子。</li>
+            </ol>
+
+            <div style="background: #f1f8e9; padding: 20px; border-radius: 10px; text-align: center; margin: 25px 0; border: 2px solid #8bc34a;">
+                <strong>核心成效：將 \( O(N^2) \) 的全面比對，降級為 \( O(\log N) \) 的精確搜索。</strong><br>
+                <small>在萬件物件場景中，這能極大的加快系統搜索速度。</small>
+            </div>
+        </div>
+    </section>
+
+
+    <section id="chapter-3-final" style="margin-bottom: 40px; background: #fdfdfd; padding: 25px; border-radius: 12px; border: 1px solid #eee;">
+        <h2 style="color: #2980b9; border-left: 6px solid #2980b9; padding-left: 15px; margin-bottom: 20px;">3. 精細比對(Narrow-phase)：處理複雜多邊形的演算法</h2>
+        
+        <div style="font-size: 1.05em; line-height: 1.8; color: #444;">
+            <p>
+                當 BVH 樹過濾掉 99% 的無關物件後，剩下的少數「疑似碰撞對」將進入精細比對階段。此時，我們必須在兩套成熟的數學方案中做出決擇：
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 25px 0;">
+                <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e0e0e0;">
+                    <h4 style="color: #2980b9; margin-top: 0;">方案一：SAT (分離軸定律)</h4>
+                    <p><strong>優點：</strong> 針對標準長方體，SAT+OBB具備極致的數值穩定性，輸出的穿透向量 \( \vec{d} \) 絕對垂直於平面，非常直覺。</p>
+                    <p><strong>缺點：</strong> 針對複雜多面體（Convex Hull），其檢查軸的數量會隨面數與邊數<strong>呈幾何倍數增長</strong>，在萬件物件場景中存在效能爆炸的風險。</p>
+                </div>
+
+                <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e0e0e0;">
+                    <h4 style="color: #27ae60; margin-top: 0;">方案二：GJK + EPA</h4>
+                    <p><strong>優點：</strong> 運算成本與物件複雜度無關。無論是方塊還是具有數百個面的精密機台，其收斂速度均穩定在同一水準。</p>
+                    <p><strong>缺點：</strong> EPA屬於迭代法，若參數設置不當，在極限邊緣（剛好接觸時）可能出現微小的浮點數波動。</p>
+                </div>
+            </div>
+
+            
+
+            <h3 style="color: #c0392b; margin-top: 30px;">■ 最終決策：為了「一致性」放棄 SAT，統一採用 GJK + EPA</h3>
+            <p>
+                為了符合數位孿生系統對精度的要求，本系統決定一致採用GJK+EPA原因如下：
+            </p>
+
+            <div style="background: #fff5f5; border-left: 5px solid #c53030; padding: 20px; border-radius: 4px; margin: 20px 0;">
+                <ul style="list-style: none; padding-left: 0;">
+                    <li style="margin-bottom: 12px;">
+                        <strong>1. 消除數值不連續 (Discontinuity)：</strong><br>
+                        混合使用兩套數學邏輯會導致碰撞判定標準不一。例如：物件在移動中可能因為從 SAT 判定切換到 GJK 判定，而產生極小值的距離差異，這在精密檢測中不合理。
+                    </li>
+                    <li style="margin-bottom: 12px;">
+                        <strong>2. 處理複雜多面體的精度：</strong><br>
+                        SAT 對於非規則形狀近似的複雜多長方體計算極其繁瑣。統一採用 <strong>GJK + EPA</strong>，能確保所有物件不論形狀多怪異，都能獲得一致且精確的穿透向量。
+                    </li>
+                    <li style="margin-bottom: 0;">
+                        <strong>3. 架構單一化與穩定性：</strong><br>
+                        統一演算法意味著我們只需維護一種 <strong>Convex Hull</strong> 資料結構。這讓系統在計算「自動避障」時，邏輯高度統一。
+                    </li>
+                </ul>
+            </div>
+
+            
+
+            <div style="margin-top: 25px; padding: 15px; background-color: #f1f8e9; border: 1px solid #c5e1a5; border-radius: 8px; text-align: center;">
+                <strong>總結：在標準方案中，我們利用 BVH樹 快速排除無關物體，並在可能碰撞的極少物體中使用高精度的 GJK + EPA 碰撞運算來完成精度要求。</strong>
+            </div>
+        </div>
+    </section>
+
+
+    <section id="chapter-4" style="margin-bottom: 40px; background: #fdfdfd; padding: 25px; border-radius: 12px; border: 1px solid #eee;">
+        <h2 style="color: #2980b9; border-left: 6px solid #2980b9; padding-left: 15px; margin-bottom: 20px;">4. 場景化決策：效能與精度的權衡取捨</h2>
+        
+        <div style="font-size: 1.05em; line-height: 1.8; color: #444;">
+            <p>在實際應用中，我們不應該用一套邏輯死守所有場景。根據使用者的操作狀態，我們可以設計不同的演算法與資料結構：</p>
+
+            <div style="margin-top: 25px; padding: 20px; background: #fffbe6; border-radius: 10px; border: 1px solid #ffe58f;">
+                <h4 style="color: #856404; margin-top: 0;">情境 1：高頻率變動場景 (即時拖拉佈局)</h4>
+                <p><strong>需求：</strong> 確保拖拉過程中維持流暢度，優先排除不相干區域。</p>
+
+                <div style="margin-bottom: 15px;">
+                    <strong>● 策略 A：標準精確模式 (BVH + 完整凸包 GJK/EPA)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> 使用完整的 BVH 空間索引與高精度凸包模型，提供最準確的穿透向量，作為物體就定位後的最後檢測。</li>
+                        <li><strong>前提：</strong> 物件拖拉至預定位置並停止移動（或低速移動）時開啟。</li>
+                        <li><strong>侷限性：</strong> 當場景物件很多，且模型面數極高時，運算負擔最重。</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <strong>● 策略 B：外型簡化模式 (BVH + 簡單多面體/OBB SAT)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> 空間索引維持 BVH，但將複雜機台簡化為<strong>粗糙多面體、長方體或球面體</strong>。利用 SAT 快速判定，減少幾何層級的運算量。</li>
+                        <li><strong>前提：</strong> 物件處於中速拖拉或初步對齊階段。</li>
+                        <li><strong>侷限性：</strong> 由於幾何體被粗糙化，會出現細節處（如機台把手）未觸碰卻報碰撞的狀況。</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <strong>● 策略 C：極速近似模式 (Spatial Hash + 球面體/AABB)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> <strong>全面降級以追求極致速度</strong>。將 BVH 索引換成 \( O(1) \) 的網格註冊表，並將物件退化為最簡單的球面體。僅做數值上的距離判定，完全無視幾何細節。</li>
+                        <li><strong>前提：</strong> 高速拖拉物件或大範圍群體移動預覽。</li>
+                        <li><strong>侷限性：</strong> <strong>誤報率極高</strong>。僅能代表「該區域有東西」，適合在拖拉初期提供視覺範圍引導。</li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div style="margin-top: 25px; padding: 20px; background: #e6f7ff; border-radius: 10px; border: 1px solid #91d5ff;">
+                <h4 style="color: #0050b3; margin-top: 0;">情境 2：極高精度需求場景 (安全間隙查驗)</h4>
+                <p><strong>需求：</strong> 針對精密設備與結構間的微小安全間隙，需要求更高的精度排除數值方法造成的抖動並獲取穩定的解析向量。</p>
+
+                <div style="margin-bottom: 20px;">
+                    <strong>● 策略 A：標準通用模式 (BVH + 完整凸包 GJK/EPA)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> 作為系統的保底方案，處理無法簡化為長方體的複雜連續曲面（如流線型機殼）。即便模型極其不規則，也能透過 Support 函數穩定判定。</li>
+                        <li><strong>前提：</strong> 物件需預先透過 <strong>V-HACD (體積層級凸分解)</strong> 生成高品質凸包模型，且系統容許EPA的數值方法迭代開銷。</li>
+                        <li><strong>侷限性：</strong> 迭代法只能求近似解，不能保證數值無誤差，數值方法帶來的微小雜訊或許不適合極高精度的場景。</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <strong>● 策略 B：解析對齊策略 (Compound OBB + SAT 解析解)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> <strong>追求數值絕對穩定性</strong>。將複雜機台拆解為<strong>多個長方體組合 (Compound OBB)</strong>，利用 SAT 的解析特性直接計算穿透向量。此方法輸出的結果具備 100% 的可重複性與穩定性。</li>
+                        <li><strong>前提：</strong> 系統需將物件從三角片轉為多長方體以計算SAT/OBB。</li>
+                        <li><strong>侷限性：</strong> 手動拆解長方體組合需要額外的前期建模工時；若組合數量過多（如超過 50 個 OBB），運算開銷將顯著增加，且這是將數值方法的雜訊換成建模長方體時的貼齊雜訊，在複雜物件上沒辦法保證精度有提升。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="margin-top: 25px; padding: 20px; background: #f6ffed; border-radius: 10px; border: 1px solid #b7eb8f;">
+                <h4 style="color: #237804; margin-top: 0;">情境 3：超大規模固定場景 (全景干涉分析)</h4>
+                <p><strong>需求：</strong> 掃描當前全場設備（動態樹）與廠房本體結構（靜態樹）的全局衝突。需在極大數據量下找出所有潛在干涉。</p>
+
+                <div style="margin-bottom: 20px;">
+                    <strong>● 策略 A：雙樹遍歷模式</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> <strong>消除重複的空間判定路徑</strong>。系統不需逐一拿動態物件查詢靜態樹，而是直接利用兩棵樹執行同步遞迴。若兩棵子樹的 AABB 不重疊，代表該區域內所有物件皆無衝突。這比單向 \( O(M \log N) \) 查詢更具空間自覺，能批次剪去數以千計的無效比對。</li>
+                        <li><strong>前提：</strong> 動態物件已完成落位並「寫回」動態樹（Dynamic BVH），且系統維持穩定的靜態結構樹（Static BVH）。</li>
+                        <li><strong>侷限性：</strong> 當動/靜態物件在空間中極度交織（如管線穿過每一台機器）時，子樹層級的 AABB 重疊率過高，會導致剪枝效率下降，運算量趨近於葉節點間的窮舉比對。</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <strong>● 策略 B：增量變動更新策略 (Dirty-node Focused Scan)</strong>
+                    <ul style="font-size: 0.95em; margin-top: 5px;">
+                        <li><strong>理由：</strong> <strong>只計算「發生變動」的區域</strong>。利用 Flag e.g. `isDirty` 標記位移過的物件，系統僅針對有變動的動態子樹與靜態樹執行同步遍歷。對於未位移的 90% 以上區域，直接複用上一次掃描的緩存結果，減少重複計算。</li>
+                        <li><strong>前提：</strong> 需實作嚴格的位移監測機制與結果緩存系統，確保未變動物件的干涉狀態在邏輯上依然正確。</li>
+                        <li><strong>侷限性：</strong> 在大範圍集體變更（如重新配置整條生產線）時，Dirty 節點過多會使策略 B 退化為全量掃描，且需額外維護緩存資料的一致性。</li>
+                    </ul>
+                </div>
+
+                
+
+                <div style="background: #ffffff; border: 1px dashed #237804; padding: 10px; margin-top: 10px; font-size: 0.95em;">
+                    <strong>技術核心：遞迴終點判定</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9em;">
+                        當雙樹同步向下遞迴時：<br>
+                        1. <strong>葉對子樹：</strong> 一方已達末端，則對另一方子樹進行最後的單向遍歷。<br>
+                        2. <strong>葉對葉：</strong> 雙方皆為最終物件，此時調用 <strong>GJK+EPA</strong> 進行精確判定。
+                    </p>
+                </div>
+            </div>
+
+            <div style="margin-top: 25px; padding: 20px; background: #f0f2f5; border-radius: 8px; border-left: 5px solid #2c3e50;">
+                <h4 style="color: #2c3e50; margin-top: 0;">技術總結：不存在通解，只有場景化的取捨</h4>
+                <p style="margin-top: 10px; font-size: 0.95em;">
+                    碰撞檢測並沒有一個能同時滿足「極致速度」與「絕對精度」的通用方法。本系統的策略在於根據操作意圖，選擇最合適的組合來最小化查詢物件並獲取結果：
+                </p>
+                
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; background: #ffffff;">
+                    <thead>
+                        <tr style="background: #e9ecef; text-align: left;">
+                            <th style="padding: 8px; border: 1px solid #dee2e6;">需求目標</th>
+                            <th style="padding: 8px; border: 1px solid #dee2e6;">選用組合</th>
+                            <th style="padding: 8px; border: 1px solid #dee2e6;">核心產出</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>高精度與穿深</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">BVH + GJK/EPA</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">數值方法產生穿透向量，供碰撞檢測使用。</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>數值絕對穩定</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">BVH + Compound Shapes OBB/SAT</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">穩定的解析解，消除迭代抖動</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>犧牲精度換極速</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">Spatial Hash + 球面/AABB</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">\( O(1) \) 極速排除無關物體，維持流暢度</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p style="margin-top: 15px; font-size: 0.9em; line-height: 1.6;">
+                    透過這套層級化體系，我們確保了在<strong>拖拉移動</strong>時能快速預警，在<strong>落位查驗</strong>時能提供精確穿深，並在<strong>全場掃描</strong>時能高效剪枝，實現效能與精度的動態動態平衡。
+                </p>
+            </div>
+
+
+            
+        </div>
     </section>
 
 </body>
