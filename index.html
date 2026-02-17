@@ -175,7 +175,7 @@
             <div style="background: #fff5f5; border-left: 5px solid #c53030; padding: 20px; border-radius: 4px; margin: 20px 0;">
                 <ul style="list-style: none; padding-left: 0;">
                     <li style="margin-bottom: 12px;">
-                        <strong>1. 消除數值不連續 (Discontinuity)：</strong><br>
+                        <strong>1. 消除數值不連續：</strong><br>
                         混合使用兩套數學邏輯會導致碰撞判定標準不一。例如：物件在移動中可能因為從 SAT 判定切換到 GJK 判定，而產生極小值的距離差異，這在精密檢測中不合理。
                     </li>
                     <li style="margin-bottom: 12px;">
@@ -274,7 +274,7 @@
                 </div>
 
                 <div style="margin-bottom: 15px;">
-                    <strong>● 策略 B：增量變動更新策略 (Dirty-node Focused Scan)</strong>
+                    <strong>● 策略 B：增量變動更新策略</strong>
                     <ul style="font-size: 0.95em; margin-top: 5px;">
                         <li><strong>理由：</strong> <strong>只計算「發生變動」的區域</strong>。利用 Flag e.g. `isDirty` 標記位移過的物件，系統僅針對有變動的動態子樹與靜態樹執行同步遍歷。對於未位移的 90% 以上區域，直接複用上一次掃描的緩存結果，減少重複計算。</li>
                         <li><strong>前提：</strong> 需實作嚴格的位移監測機制與結果緩存系統，確保未變動物件的干涉狀態在邏輯上依然正確。</li>
